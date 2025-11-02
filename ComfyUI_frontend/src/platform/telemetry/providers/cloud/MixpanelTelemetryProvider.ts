@@ -1,6 +1,11 @@
 import type { OverridedMixpanel } from 'mixpanel-browser'
 
 import { useCurrentUser } from '@/composables/auth/useCurrentUser'
+import {
+  checkForCompletedTopup as checkTopupUtil,
+  clearTopupTracking as clearTopupUtil,
+  startTopupTracking as startTopupUtil
+} from '@/platform/telemetry/topupTracker'
 import { useWorkflowStore } from '@/platform/workflow/management/stores/workflowStore'
 import { useWorkflowTemplatesStore } from '@/platform/workflow/templates/repositories/workflowTemplatesStore'
 import { app } from '@/scripts/app'
@@ -15,6 +20,9 @@ import type {
   ExecutionContext,
   ExecutionErrorMetadata,
   ExecutionSuccessMetadata,
+  HelpCenterClosedMetadata,
+  HelpCenterOpenedMetadata,
+  HelpResourceClickedMetadata,
   NodeSearchMetadata,
   NodeSearchResultMetadata,
   PageVisibilityMetadata,
@@ -28,6 +36,7 @@ import type {
   TemplateLibraryMetadata,
   TemplateLibraryClosedMetadata,
   TemplateMetadata,
+  WorkflowCreatedMetadata,
   WorkflowImportMetadata
 } from '../../types'
 import { TelemetryEvents } from '../../types'
@@ -168,6 +177,23 @@ export class MixpanelTelemetryProvider implements TelemetryProvider {
     )
   }
 
+  trackApiCreditTopupSucceeded(): void {
+    this.trackEvent(TelemetryEvents.API_CREDIT_TOPUP_SUCCEEDED)
+  }
+
+  // Credit top-up tracking methods (composition with utility functions)
+  startTopupTracking(): void {
+    startTopupUtil()
+  }
+
+  checkForCompletedTopup(events: any[] | undefined | null): boolean {
+    return checkTopupUtil(events)
+  }
+
+  clearTopupTracking(): void {
+    clearTopupUtil()
+  }
+
   trackRunButton(options?: { subscribe_to_run?: boolean }): void {
     const executionContext = this.getExecutionContext()
 
@@ -183,6 +209,14 @@ export class MixpanelTelemetryProvider implements TelemetryProvider {
     }
 
     this.trackEvent(TelemetryEvents.RUN_BUTTON_CLICKED, runButtonProperties)
+  }
+
+  trackRunTriggeredViaKeybinding(): void {
+    this.trackEvent(TelemetryEvents.RUN_TRIGGERED_KEYBINDING)
+  }
+
+  trackRunTriggeredViaMenu(): void {
+    this.trackEvent(TelemetryEvents.RUN_TRIGGERED_MENU)
   }
 
   trackSurvey(
@@ -267,6 +301,22 @@ export class MixpanelTelemetryProvider implements TelemetryProvider {
 
   trackTemplateFilterChanged(metadata: TemplateFilterMetadata): void {
     this.trackEvent(TelemetryEvents.TEMPLATE_FILTER_CHANGED, metadata)
+  }
+
+  trackHelpCenterOpened(metadata: HelpCenterOpenedMetadata): void {
+    this.trackEvent(TelemetryEvents.HELP_CENTER_OPENED, metadata)
+  }
+
+  trackHelpResourceClicked(metadata: HelpResourceClickedMetadata): void {
+    this.trackEvent(TelemetryEvents.HELP_RESOURCE_CLICKED, metadata)
+  }
+
+  trackHelpCenterClosed(metadata: HelpCenterClosedMetadata): void {
+    this.trackEvent(TelemetryEvents.HELP_CENTER_CLOSED, metadata)
+  }
+
+  trackWorkflowCreated(metadata: WorkflowCreatedMetadata): void {
+    this.trackEvent(TelemetryEvents.WORKFLOW_CREATED, metadata)
   }
 
   trackWorkflowExecution(): void {
