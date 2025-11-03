@@ -393,9 +393,11 @@ export class ComfyUI {
       style: { display: 'none' },
       parent: document.body,
       onchange: async () => {
-        // @ts-expect-error fixme ts strict error
-        await app.handleFile(fileInput.files[0], 'file_button')
-        fileInput.value = ''
+        const file = fileInput.files?.[0]
+        if (file) {
+          await app.handleFile(file, 'file_button')
+          fileInput.value = ''
+        }
       }
     })
 
@@ -474,7 +476,8 @@ export class ComfyUI {
           textContent: 'Queue Prompt',
           onclick: () => {
             if (isCloud) {
-              useTelemetry()?.trackRunTriggeredViaMenu()
+              useTelemetry()?.trackRunButton({ trigger_source: 'legacy_ui' })
+              useTelemetry()?.trackWorkflowExecution()
             }
             app.queuePrompt(0, this.batchCount)
           }
@@ -581,7 +584,8 @@ export class ComfyUI {
             textContent: 'Queue Front',
             onclick: () => {
               if (isCloud) {
-                useTelemetry()?.trackRunTriggeredViaMenu()
+                useTelemetry()?.trackRunButton({ trigger_source: 'legacy_ui' })
+                useTelemetry()?.trackWorkflowExecution()
               }
               app.queuePrompt(-1, this.batchCount)
             }

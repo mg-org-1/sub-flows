@@ -47,6 +47,7 @@ export interface RunButtonProperties {
   subgraph_count: number
   has_api_nodes: boolean
   api_node_names: string[]
+  trigger_source?: ExecutionTriggerSource
 }
 
 /**
@@ -69,6 +70,7 @@ export interface ExecutionContext {
   total_node_count: number
   has_api_nodes: boolean
   api_node_names: string[]
+  trigger_source?: ExecutionTriggerSource
 }
 
 /**
@@ -160,6 +162,15 @@ export interface TabCountMetadata {
 }
 
 /**
+ * Settings change metadata
+ */
+export interface SettingChangedMetadata {
+  setting_id: string
+  previous_value?: unknown
+  new_value?: unknown
+}
+
+/**
  * Node search metadata
  */
 export interface NodeSearchMetadata {
@@ -181,7 +192,7 @@ export interface TemplateFilterMetadata {
   search_query?: string
   selected_models: string[]
   selected_use_cases: string[]
-  selected_licenses: string[]
+  selected_runs_on: string[]
   sort_by:
     | 'default'
     | 'alphabetical'
@@ -190,6 +201,14 @@ export interface TemplateFilterMetadata {
     | 'model-size-low-to-high'
   filtered_count: number
   total_count: number
+}
+
+/**
+ * UI button click tracking metadata
+ */
+export interface UiButtonClickMetadata {
+  /** Canonical identifier for the button (e.g., "comfy_logo") */
+  button_id: string
 }
 
 /**
@@ -248,9 +267,10 @@ export interface TelemetryProvider {
   trackAddApiCreditButtonClicked(): void
   trackApiCreditTopupButtonPurchaseClicked(amount: number): void
   trackApiCreditTopupSucceeded(): void
-  trackRunButton(options?: { subscribe_to_run?: boolean }): void
-  trackRunTriggeredViaKeybinding(): void
-  trackRunTriggeredViaMenu(): void
+  trackRunButton(options?: {
+    subscribe_to_run?: boolean
+    trigger_source?: ExecutionTriggerSource
+  }): void
 
   // Credit top-up tracking (composition with internal utilities)
   startTopupTracking(): void
@@ -297,6 +317,12 @@ export interface TelemetryProvider {
   trackWorkflowExecution(): void
   trackExecutionError(metadata: ExecutionErrorMetadata): void
   trackExecutionSuccess(metadata: ExecutionSuccessMetadata): void
+
+  // Settings events
+  trackSettingChanged(metadata: SettingChangedMetadata): void
+
+  // Generic UI button click events
+  trackUiButtonClicked(metadata: UiButtonClickMetadata): void
 }
 
 /**
@@ -313,8 +339,6 @@ export const TelemetryEvents = {
 
   // Subscription Flow
   RUN_BUTTON_CLICKED: 'app:run_button_click',
-  RUN_TRIGGERED_KEYBINDING: 'app:run_triggered_keybinding',
-  RUN_TRIGGERED_MENU: 'app:run_triggered_menu',
   SUBSCRIPTION_REQUIRED_MODAL_OPENED: 'app:subscription_required_modal_opened',
   SUBSCRIBE_NOW_BUTTON_CLICKED: 'app:subscribe_now_button_clicked',
   MONTHLY_SUBSCRIPTION_SUCCEEDED: 'app:monthly_subscription_succeeded',
@@ -354,6 +378,9 @@ export const TelemetryEvents = {
   // Template Filter Analytics
   TEMPLATE_FILTER_CHANGED: 'app:template_filter_changed',
 
+  // Settings
+  SETTING_CHANGED: 'app:setting_changed',
+
   // Help Center Analytics
   HELP_CENTER_OPENED: 'app:help_center_opened',
   HELP_RESOURCE_CLICKED: 'app:help_resource_clicked',
@@ -365,11 +392,19 @@ export const TelemetryEvents = {
   // Execution Lifecycle
   EXECUTION_START: 'execution_start',
   EXECUTION_ERROR: 'execution_error',
-  EXECUTION_SUCCESS: 'execution_success'
+  EXECUTION_SUCCESS: 'execution_success',
+  // Generic UI Button Click
+  UI_BUTTON_CLICKED: 'app:ui_button_clicked'
 } as const
 
 export type TelemetryEventName =
   (typeof TelemetryEvents)[keyof typeof TelemetryEvents]
+
+export type ExecutionTriggerSource =
+  | 'button'
+  | 'keybinding'
+  | 'legacy_ui'
+  | 'unknown'
 
 /**
  * Union type for all possible telemetry event properties
@@ -391,6 +426,8 @@ export type TelemetryEventProperties =
   | NodeSearchMetadata
   | NodeSearchResultMetadata
   | TemplateFilterMetadata
+  | SettingChangedMetadata
+  | UiButtonClickMetadata
   | HelpCenterOpenedMetadata
   | HelpResourceClickedMetadata
   | HelpCenterClosedMetadata
