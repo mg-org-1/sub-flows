@@ -14,12 +14,25 @@ import { buildPresetSection } from "./widget-preset-system.js";
 import { attachAllEventHandlers } from "./widget-event-handlers.js";
 
 
+// Counter to ensure unique storage keys even when node.id is -1
+let widgetCounter = 0;
+
 // Create the widget
 function addStringMultilineTagEditorWidget(node) {
-    const storageKey = `string_multiline_tag_editor_${node.id}`;
+    // Use widget counter as fallback when node.id is -1 (not yet assigned)
+    const uniqueId = node.id !== -1 ? node.id : `widget_${widgetCounter++}`;
+    const storageKey = `string_multiline_tag_editor_${uniqueId}`;
 
-    // Load persisted state
-    const state = EditorState.loadFromLocalStorage(storageKey);
+    // Don't load from localStorage yet - wait for workflow value first
+    // We'll load localStorage in setValue if needed
+    let state = new EditorState(); // Start with fresh state
+    let isConfigured = false; // Flag to know if onConfigure already loaded the state
+    let hasSetInitialValue = false; // Track if we've set the initial workflow value
+    let onConfigureCallCount = 0; // Track how many times onConfigure has been called
+
+    // Create a temporary state to check default text
+    const defaultState = new EditorState();
+    const defaultText = defaultState.text;
 
     // Create main editor container (this will be THE widget)
     const editorContainer = document.createElement("div");
@@ -438,13 +451,114 @@ function addStringMultilineTagEditorWidget(node) {
             return getPlainText();
         },
         setValue(v) {
-            setEditorText(v);
+            // Skip loading if we've already processed the workflow value via onConfigure
+            if (isConfigured && hasSetInitialValue) {
+                return;
+            }
+
+            // Load localStorage for this specific node only when setValue is called
+            // This ensures we don't mix up data between different node instances
+            if (state.text === defaultText && !hasSetInitialValue) {
+                // State hasn't been customized yet - try loading from localStorage
+                const savedState = EditorState.loadFromLocalStorage(storageKey);
+                if (savedState.text && savedState.text !== defaultText) {
+                    Object.assign(state, savedState);
+                }
+            }
+
+            // Priority order:
+            // 1. If localStorage has custom data (not default) → use it (persistent edits)
+            // 2. If workflow has custom data (not default) → use it (shared workflow)
+            // 3. Otherwise use workflow value or default
+            if (state.text && state.text !== defaultText && !hasSetInitialValue) {
+                // localStorage has custom data - keep it (same session, persistent edits)
+                setEditorText(state.text);
+                hasSetInitialValue = true;
+            } else if (v && v !== defaultText && !hasSetInitialValue) {
+                // Workflow has custom data - use it (first load of shared workflow)
+                setEditorText(v);
+                state.text = v;
+                hasSetInitialValue = true;
+            } else if (!hasSetInitialValue) {
+                // Both are default or empty - use workflow value or default
+                const textToUse = v || defaultText;
+                setEditorText(textToUse);
+                state.text = textToUse;
+                hasSetInitialValue = true;
+            }
         }
     });
 
     widget.inputEl = editor;
     widget.options.minNodeSize = [900, 600];
     widget.options.maxWidth = 1400;
+
+    // Ensure widget value is properly loaded from workflow
+    // ComfyUI loads widget values, but we need to handle them properly
+    const originalSetValue = widget.setValue.bind(widget);
+    widget.setValue = function(v) {
+        originalSetValue(v);
+        if (v !== undefined) {
+            widget.value = v;
+        }
+    };
+
+    // Hook into node's onConfigure to load workflow values
+    // This is called after node creation with the workflow data
+    const originalOnConfigure = node.onConfigure?.bind(node) || (() => {});
+    node.onConfigure = function(info) {
+        onConfigureCallCount++;
+        const result = originalOnConfigure(info);
+
+        // Load workflow value when onConfigure is called (user opened a file)
+        if (info && Array.isArray(info.widgets_values) && info.widgets_values[0]) {
+            const workflowValue = info.widgets_values[0];
+
+            // Try to load full state from localStorage first (includes history)
+            const savedState = EditorState.loadFromLocalStorage(storageKey);
+            if (savedState && savedState.text && savedState.history && savedState.history.length > 0) {
+                // We have localStorage with history - this means we had local edits
+                Object.assign(state, savedState);
+
+                // Use onConfigureCallCount to distinguish reload from new workflow
+                // First call = initial load, preserve localStorage (it's either reload or user edits)
+                // Subsequent calls = file opened or workflow reloaded, reset if text changed
+                if (onConfigureCallCount === 1) {
+                    // First time seeing this node - keep the loaded history
+                    // Just make sure text matches workflow so they're in sync
+                    state.text = workflowValue;
+                } else {
+                    // Subsequent calls - check if workflow changed
+                    if (state.lastWorkflowValue && workflowValue !== state.lastWorkflowValue) {
+                        // Workflow value changed - user opened a different file
+                        state.text = workflowValue;
+                        state.history = [{text: workflowValue, caretPos: 0}];
+                        state.historyIndex = 0;
+                    } else {
+                        // Workflow unchanged or first time tracking it - preserve history (page reload)
+                        state.text = workflowValue;
+                    }
+                }
+
+                state.lastWorkflowValue = workflowValue;
+                setEditorText(state.text);
+            } else {
+                // No localStorage or no history - just use workflow value
+                setEditorText(workflowValue);
+                state.text = workflowValue;
+                state.history = [{text: workflowValue, caretPos: 0}];
+                state.historyIndex = 0;
+                state.lastWorkflowValue = workflowValue;
+            }
+
+            widget.value = workflowValue;
+            historyStatus.textContent = state.getHistoryStatus();
+            isConfigured = true; // Mark that we've configured from workflow
+            hasSetInitialValue = true; // Mark that we've set the initial value from workflow
+        }
+
+        return result;
+    };
 
     // Set initial node size on creation
     setTimeout(() => {
@@ -523,10 +637,10 @@ app.registerExtension({
                     originalOnNodeCreated.call(this);
                 }
 
-                // Remove any existing widgets (there shouldn't be any since we have no inputs)
-                this.widgets = [];
+                // Remove the default widget from the widgets array so it doesn't render
+                this.widgets.shift();
 
-                // Create our custom widget
+                // Create our custom widget (becomes the FIRST widget now)
                 addStringMultilineTagEditorWidget(this);
             };
         }
