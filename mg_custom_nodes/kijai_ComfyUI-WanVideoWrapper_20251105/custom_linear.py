@@ -101,12 +101,12 @@ class CustomLinear(nn.Linear):
         self.lora_diffs = []
         for i, diff in enumerate(lora_diffs):
             if len(diff) > 1:
-                self.register_buffer(f"lora_diff_{i}_0", diff[0].to(device))
-                self.register_buffer(f"lora_diff_{i}_1", diff[1].to(device))
+                self.register_buffer(f"lora_diff_{i}_0", diff[0].to(device, self.compute_dtype))
+                self.register_buffer(f"lora_diff_{i}_1", diff[1].to(device, self.compute_dtype))
                 setattr(self, f"lora_diff_{i}_2", diff[2])
                 self.lora_diffs.append((f"lora_diff_{i}_0", f"lora_diff_{i}_1", f"lora_diff_{i}_2"))
             else:
-                self.register_buffer(f"lora_diff_{i}_0", diff[0].to(device))
+                self.register_buffer(f"lora_diff_{i}_0", diff[0].to(device, self.compute_dtype))
                 self.lora_diffs.append(f"lora_diff_{i}_0")
 
     def _get_weight_with_lora(self, weight):
@@ -128,7 +128,7 @@ class CustomLinear(nn.Linear):
                 patch_diff = torch.mm(
                     lora_diff_0.flatten(start_dim=1),
                     lora_diff_1.flatten(start_dim=1)
-                ).reshape(weight.shape)
+                ).reshape(weight.shape) + 0
                 alpha = lora_diff_2 / lora_diff_1.shape[0] if lora_diff_2 is not None else 1.0
                 scale = lora_strength * alpha
                 weight = weight.add(patch_diff, alpha=scale)
@@ -151,9 +151,6 @@ class CustomLinear(nn.Linear):
                 input = input * self.scale_weight
 
         weight = self._get_weight_with_lora(weight)
-        
-        if self.compute_dtype is not None:
-            weight = weight.to(self.compute_dtype)
 
         return torch.nn.functional.linear(input, weight, bias)
     
