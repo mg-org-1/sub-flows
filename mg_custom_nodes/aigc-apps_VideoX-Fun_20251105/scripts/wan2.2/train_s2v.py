@@ -90,38 +90,6 @@ def filter_kwargs(cls, kwargs):
     filtered_kwargs = {k: v for k, v in kwargs.items() if k in valid_params}
     return filtered_kwargs
 
-def get_random_downsample_ratio(sample_size, image_ratio=[],
-                                all_choices=False, rng=None):
-    def _create_special_list(length):
-        if length == 1:
-            return [1.0]
-        if length >= 2:
-            first_element = 0.75
-            remaining_sum = 1.0 - first_element
-            other_elements_value = remaining_sum / (length - 1)
-            special_list = [first_element] + [other_elements_value] * (length - 1)
-            return special_list
-            
-    if sample_size >= 1536:
-        number_list = [1, 1.25, 1.5, 2, 2.5, 3] + image_ratio 
-    elif sample_size >= 1024:
-        number_list = [1, 1.25, 1.5, 2] + image_ratio
-    elif sample_size >= 768:
-        number_list = [1, 1.25, 1.5] + image_ratio
-    elif sample_size >= 512:
-        number_list = [1] + image_ratio
-    else:
-        number_list = [1]
-
-    if all_choices:
-        return number_list
-
-    number_list_prob = np.array(_create_special_list(len(number_list)))
-    if rng is None:
-        return np.random.choice(number_list, p = number_list_prob)
-    else:
-        return rng.choice(number_list, p = number_list_prob)
-
 def resize_mask(mask, latent, process_first_frame_only=True):
     latent_size = latent.size()
     batch_size, channels, num_frames, height, width = mask.shape
@@ -1799,7 +1767,7 @@ def main():
                             init_first_frame = rng.choice([0, 1], p = [0.50, 0.50])
                     if init_first_frame or has_motion_pixel_values:
                         if not has_motion_pixel_values:
-                            motion_pixel_values[:, -6:, :] = ref_pixel_values[:, 0, :]
+                            motion_pixel_values[:, -6:, :] = ref_pixel_values
                             
                         motion_frames_latents_length = int((args.motion_frames - 1) / sample_n_frames_bucket_interval + 1)
                         local_pixel_values = torch.cat([motion_pixel_values, pixel_values], dim = 1)
