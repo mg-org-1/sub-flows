@@ -878,11 +878,10 @@ class TextEncodeQwenImageEditPlusCustom_lrzjason:
             # print("ref_crop",ref_crop)
             # print("ref_upscale",ref_upscale)
             
-            
+            samples = image.movedim(-1, 1)
             if not to_ref and not to_vl:
                 continue
             if to_ref:
-                samples = image.movedim(-1, 1)
                 # print("ori_image.shape",samples.shape)
                 # ori_height, ori_width = samples.shape[2:]
                 ori_longest_edge = max(samples.shape[2], samples.shape[3])
@@ -1014,7 +1013,9 @@ class TextEncodeQwenImageEditPlusCustom_lrzjason:
         if not return_full_refs_cond:
             conditioning_output = conditioning_only_with_main_ref
         
-        main_image = vae_images[main_image_index]
+        main_image = None
+        if len(vae_images)>0:
+            main_image = vae_images[main_image_index]
         
         custom_output = {
             "pad_info": pad_info,
