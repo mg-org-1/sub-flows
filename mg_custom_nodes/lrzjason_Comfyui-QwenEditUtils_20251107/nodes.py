@@ -8,6 +8,10 @@ from PIL import Image
 import json
 import os
 import copy
+import folder_paths
+import hashlib
+
+from PIL import Image, ImageOps, ImageSequence
 
 class CropWithPadInfo:
     @classmethod
@@ -1002,14 +1006,14 @@ class TextEncodeQwenImageEditPlusCustom_lrzjason:
         conditioning_only_with_main_ref = None
         if len(ref_latents) > 0:
             conditioning_only_with_main_ref = node_helpers.conditioning_set_values(conditioning, {"reference_latents": [ref_latents[main_image_index]]}, append=True)
-            conditioning = node_helpers.conditioning_set_values(conditioning, {"reference_latents": ref_latents}, append=True)
+            conditioning_full_refs = node_helpers.conditioning_set_values(conditioning, {"reference_latents": ref_latents}, append=True)
             samples = ref_latents[main_image_index]
         latent_out = {"samples": samples}
         
         # if set_noise_mask:
         #     latent_out["noise_mask"] = noise_mask
         
-        conditioning_output = conditioning
+        conditioning_output = conditioning_full_refs
         if not return_full_refs_cond:
             conditioning_output = conditioning_only_with_main_ref
         
@@ -1020,14 +1024,15 @@ class TextEncodeQwenImageEditPlusCustom_lrzjason:
         custom_output = {
             "pad_info": pad_info,
             # "noise_mask": noise_mask,
-            "full_refs_cond": conditioning,
+            "full_refs_cond": conditioning_full_refs,
             "main_ref_cond": conditioning_only_with_main_ref,
             "main_image": main_image,
             "vae_images": vae_images,
             "ref_latents": ref_latents,
             "vl_images": vl_images,
             "full_prompt": full_prompt,
-            "llama_template": llama_template
+            "llama_template": llama_template,
+            "no_refs_cond": conditioning
         }
         
         return (conditioning_output, latent_out, custom_output)
@@ -1195,7 +1200,8 @@ class QwenEditOutputExtractor:
         "ref_latents",
         "vl_images",
         "full_prompt",
-        "llama_template"
+        "llama_template",
+        "no_refs_cond"
     ]
     @classmethod
     def INPUT_TYPES(s):
@@ -1209,8 +1215,8 @@ class QwenEditOutputExtractor:
     # RETURN_TYPES = ("ANY", "MASK", "CONDITIONING", "CONDITIONING", "IMAGE", "LIST", "LIST", "LIST", "STRING", "STRING")
     # RETURN_NAMES = ("pad_info", "noise_mask", "full_refs_cond", "main_ref_cond", "main_image", "vae_images", "ref_latents", "vl_images", "full_prompt", "llama_template")
     
-    RETURN_TYPES = ("ANY", "CONDITIONING", "CONDITIONING", "IMAGE", "LIST", "LIST", "LIST", "STRING", "STRING")
-    RETURN_NAMES = ("pad_info", "full_refs_cond", "main_ref_cond", "main_image", "vae_images", "ref_latents", "vl_images", "full_prompt", "llama_template")
+    RETURN_TYPES = ("ANY", "CONDITIONING", "CONDITIONING", "IMAGE", "LIST", "LIST", "LIST", "STRING", "STRING", "CONDITIONING")
+    RETURN_NAMES = ("pad_info", "full_refs_cond", "main_ref_cond", "main_image", "vae_images", "ref_latents", "vl_images", "full_prompt", "llama_template", "no_refs_cond")
     FUNCTION = "extract"
 
     CATEGORY = "advanced/conditioning"
@@ -1226,9 +1232,11 @@ class QwenEditOutputExtractor:
         vl_images = custom_output['vl_images']
         full_prompt = custom_output['full_prompt']
         llama_template = custom_output['llama_template']
+        no_refs_cond = custom_output['no_refs_cond']
+        
         
         # return (pad_info, noise_mask, full_refs_cond, main_ref_cond, main_image, vae_images, ref_latents, vl_images, full_prompt, llama_template )
-        return (pad_info, full_refs_cond, main_ref_cond, main_image, vae_images, ref_latents, vl_images, full_prompt, llama_template )
+        return (pad_info, full_refs_cond, main_ref_cond, main_image, vae_images, ref_latents, vl_images, full_prompt, llama_template, no_refs_cond )
 
 
 
@@ -1323,6 +1331,87 @@ class QwenEditAdaptiveLongestEdge():
         # print("output", output)
         return (output, )  
 
+
+class LoadImageReturnFilename:
+    @classmethod
+    def INPUT_TYPES(s):
+        input_dir = folder_paths.get_input_directory()
+        files = [f for f in os.listdir(input_dir) if os.path.isfile(os.path.join(input_dir, f))]
+        files = folder_paths.filter_files_content_types(files, ["image"])
+        return {"required":
+                    {"image": (sorted(files), {"image_upload": True})},
+                }
+
+    CATEGORY = "image"
+
+    RETURN_TYPES = ("IMAGE", "MASK", "STRING", )
+    RETURN_NAMES = ("image", "mask", "filename", )
+    FUNCTION = "load_image"
+    def load_image(self, image):
+        image_path = folder_paths.get_annotated_filepath(image)
+        
+        # get filename from image_path without ext
+        filename = os.path.splitext(os.path.basename(image_path))[0]
+        
+        img = node_helpers.pillow(Image.open, image_path)
+
+        output_images = []
+        output_masks = []
+        w, h = None, None
+
+        excluded_formats = ['MPO']
+
+        for i in ImageSequence.Iterator(img):
+            i = node_helpers.pillow(ImageOps.exif_transpose, i)
+
+            if i.mode == 'I':
+                i = i.point(lambda i: i * (1 / 255))
+            image = i.convert("RGB")
+
+            if len(output_images) == 0:
+                w = image.size[0]
+                h = image.size[1]
+
+            if image.size[0] != w or image.size[1] != h:
+                continue
+
+            image = np.array(image).astype(np.float32) / 255.0
+            image = torch.from_numpy(image)[None,]
+            if 'A' in i.getbands():
+                mask = np.array(i.getchannel('A')).astype(np.float32) / 255.0
+                mask = 1. - torch.from_numpy(mask)
+            elif i.mode == 'P' and 'transparency' in i.info:
+                mask = np.array(i.convert('RGBA').getchannel('A')).astype(np.float32) / 255.0
+                mask = 1. - torch.from_numpy(mask)
+            else:
+                mask = torch.zeros((64,64), dtype=torch.float32, device="cpu")
+            output_images.append(image)
+            output_masks.append(mask.unsqueeze(0))
+
+        if len(output_images) > 1 and img.format not in excluded_formats:
+            output_image = torch.cat(output_images, dim=0)
+            output_mask = torch.cat(output_masks, dim=0)
+        else:
+            output_image = output_images[0]
+            output_mask = output_masks[0]
+
+        return (output_image, output_mask, filename)
+
+    @classmethod
+    def IS_CHANGED(s, image):
+        image_path = folder_paths.get_annotated_filepath(image)
+        m = hashlib.sha256()
+        with open(image_path, 'rb') as f:
+            m.update(f.read())
+        return m.digest().hex()
+
+    @classmethod
+    def VALIDATE_INPUTS(s, image):
+        if not folder_paths.exists_annotated_filepath(image):
+            return "Invalid image file: {}".format(image)
+
+        return True
+
 NODE_CLASS_MAPPINGS = {
     "CropWithPadInfo": CropWithPadInfo,
     "TextEncodeQwenImageEdit_lrzjason": TextEncodeQwenImageEdit_lrzjason,
@@ -1336,7 +1425,8 @@ NODE_CLASS_MAPPINGS = {
     "QwenEditListExtractor": QwenEditListExtractor,
     "QwenEditAny2Image": QwenEditAny2Image,
     "QwenEditAny2Latent": QwenEditAny2Latent,
-    "QwenEditAdaptiveLongestEdge": QwenEditAdaptiveLongestEdge
+    "QwenEditAdaptiveLongestEdge": QwenEditAdaptiveLongestEdge,
+    "LoadImageReturnFilename": LoadImageReturnFilename
 }
 
 # Display name mappings
@@ -1353,5 +1443,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "QwenEditListExtractor": "Qwen Edit List Extractor",
     "QwenEditAny2Image": "Qwen Edit Any2Image",
     "QwenEditAny2Latent": "Qwen Edit Any2Latent",
-    "QwenEditAdaptiveLongestEdge": "Qwen Edit Adaptive Longest Edge"
+    "QwenEditAdaptiveLongestEdge": "Qwen Edit Adaptive Longest Edge",
+    "LoadImageReturnFilename": "Load Image Return Filename"
 }
