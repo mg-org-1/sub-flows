@@ -1,12 +1,13 @@
 # Lucy Edit - ComfyUI
 
 <p align="center">
-  <img src="assets/logo.png" width="680" alt="Lucy Edit Dev Logo"/>
+  <img width="680" height="399" alt="Lucy Edit Dev Logo" src="https://github.com/user-attachments/assets/a70c9eda-36d8-459a-8204-e5eca520dcb0" />
 </p>
+
 
 <p align="center">
   🧪 <a href="http://github.com/DecartAI/lucy-edit-comfyui"><b>GitHub</b></a>
-  &nbsp;|&nbsp; 🤗 <a href="https://huggingface.co/decart-ai/Lucy-Edit-Dev">Huggingface</a>
+  &nbsp;|&nbsp; 🤗 <a href="https://huggingface.co/decart-ai/Lucy-Edit-1.1-Dev">Huggingface</a>
   &nbsp;|&nbsp; 📖 <a href="https://platform.decart.ai">Playground</a>
   &nbsp;|&nbsp; 📑 <a href="https://d2drjpuinn46lb.cloudfront.net/Lucy_Edit__High_Fidelity_Text_Guided_Video_Editing.pdf">Technical Report</a>
   &nbsp;|&nbsp; 💬 <a href="https://discord.gg/decart">Discord</a>
@@ -70,10 +71,10 @@
 1. Download the appropriate weights for your setup:
 
    * **FP16 weights**:  
-     https://huggingface.co/decart-ai/Lucy-Edit-Dev-ComfyUI/resolve/main/lucy-edit-dev-cui-fp16.safetensors
+     https://huggingface.co/decart-ai/Lucy-Edit-Dev-ComfyUI/resolve/main/lucy-edit-1.1-dev-cui-fp16.safetensors
 
    * **FP32 weights**:  
-     https://huggingface.co/decart-ai/Lucy-Edit-Dev-ComfyUI/resolve/main/lucy-edit-dev-cui.safetensors
+     https://huggingface.co/decart-ai/Lucy-Edit-Dev-ComfyUI/resolve/main/lucy-edit-1.1-dev-cui.safetensors
 
 2. Place the weights under: `models/diffusion_models/`
 
@@ -158,6 +159,7 @@ Note: The prompts above are not enriched, the model will react better to enriche
 * [ ] Add support for Lucy Edit Dev/Image API
 
 ## 🔥 Latest News
+- **[2025-11-07]**: **Lucy Edit 1.1 Dev** Weights released on huggingface and ComfyUI.
 - **[2025-09-17]**: Initial **Lucy Edit Dev** weights & reference code released.
 - **[2025-09-16]**: Diffusers integration PR Merged. <a href="https://github.com/huggingface/diffusers/pull/12340">PR #12340</a>.
 - **[2025-09-16]**: Diffusers integration PR opened. <a href="https://github.com/huggingface/diffusers/pull/12340">PR #12340</a>.
