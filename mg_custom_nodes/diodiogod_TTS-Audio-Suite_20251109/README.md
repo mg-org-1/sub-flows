@@ -7,7 +7,7 @@
 [![Dynamic TOML Badge][version-shield]][version-url]
 [![Ko-Fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/diogogo)
 
-# TTS Audio Suite v4.14.19
+# TTS Audio Suite v4.14.20
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/diogogo)
 
@@ -56,12 +56,11 @@ Emotion               Multilingual              New TTS Engine
 Control               Official (23-lang)        90min Generation
 │
 ▼
-v4.12.0 ──────────►
+v4.12 ──────────►
 Oct 25
 │
-Per-Segment
-Parameter
-Switching
+Per-Seg Parameter
+Switching [seed:24]
 ```
 
 <details>
